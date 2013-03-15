@@ -1,0 +1,113 @@
+syntax logo_syntax ("logo_lexique.gLexique") :
+import "logo_options.gOption" ;
+import "logo_semantics.gSemantics" ;
+
+# Règle régissant la boucle principale
+rule <start_symbol> :
+	$PROGRAM$ ;
+	@routineMap tableRoutines [emptyMap] ;
+	@instructionList listeInstructions [emptyList] ;
+	repeat
+	while
+		<routine_definition> !?tableRoutines;
+	end repeat ;
+	$BEGIN$ ;
+	<instruction_list> !tableRoutines !?listeInstructions;
+	$END$ ;
+	$.$ ;
+
+	@bool penDown := false ;
+	@double x := 0.0 ;
+	@double y := 0.0 ;
+	@double angle := 0.0 ; # Angle en degrés
+	@string SVGInstructionString := "" ;
+	foreach listeInstructions do
+		[mInstruction codeDisplay !?penDown !?x !?y !?angle !?SVGInstructionString] ;
+	end foreach ;
+
+	const @string sourceFilePath := [@string stringWithSourceFilePath] ;
+	@string code := [filewrapper generationTemplate.svg
+		![sourceFilePath lastPathComponent]
+		!SVGInstructionString
+	] ;
+	[code writeToFile ![sourceFilePath stringByDeletingPathExtension] . ".svg"] ;
+end rule ;
+
+# On régit les définitions de routine
+rule <routine_definition> 
+	?!@routineMap tableRoutines:
+	@instructionList listeInstructionsRoutines [emptyList] ;
+	$ROUTINE$;
+	$identifier$?@lstring routine_name;
+#	log routine_name ;
+	$BEGIN$ ;
+		<instruction_list> !tableRoutines !?listeInstructionsRoutines;
+	$END$ ;
+	[!?tableRoutines insertKey !routine_name !listeInstructionsRoutines] ;
+end rule;
+
+# Règle de la liste des instructions (routine ou programme)
+rule <instruction_list> 
+	??@routineMap tableRoutines ?!@instructionList listeInstructions:
+	repeat
+	while
+		<forward> !?listeInstructions;
+	while
+		<rotate> !?listeInstructions;
+	while
+		<pen> !?listeInstructions;
+	while
+		<call> !tableRoutines !?listeInstructions;
+	end repeat;
+end rule;
+
+rule <forward> ?!@instructionList listeInstructions:
+	$FORWARD$; 
+	$integer$?@luint valeurLength; 
+#	log forward_int ;
+	@instruction instr_forward := [@forward new !valeurLength] ;
+	listeInstructions += !instr_forward;
+	$;$;
+end rule;
+
+rule <rotate> ?!@instructionList listeInstructions:
+	$ROTATE$; 
+	$integer$?@luint valeurAngle; 
+#	log rotate_int ;
+	@instruction instr_rotate := [@rotate new !valeurAngle] ;
+	listeInstructions += !instr_rotate;
+	$;$;
+end rule;
+
+rule <pen> ?!@instructionList listeInstructions:
+	$PEN$;
+		repeat
+			while
+				$UP$; $;$; @instruction instr_pen_up := [@penUp new] ; 	listeInstructions += !instr_pen_up;
+			while
+				$DOWN$; $;$; @instruction instr_pen_down := [@penDown new] ; 	listeInstructions += !instr_pen_down;
+		end repeat;
+end rule;
+
+rule <call> 
+	??@routineMap tableRoutines ?!@instructionList listeCouranteInstructions:
+	@instructionList listeInstructionsRoutines [emptyList] ;
+	$CALL$; 
+	$identifier$?@lstring routine_name_call; 
+	[tableRoutines searchKey !routine_name_call ?listeInstructionsRoutines] ;
+	foreach listeInstructionsRoutines do
+		listeCouranteInstructions += !mInstruction ;
+	end foreach ;
+#	log routine_name_call ;
+	$;$;
+end rule;
+
+filewrapper generationTemplate in "." {
+} {
+} {
+template svg "logo_svg.gTemplate"
+?@string TITLE
+?@string DRAWINGS
+;
+}
+end syntax ;
